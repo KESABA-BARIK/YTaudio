@@ -251,24 +251,28 @@ class Player:
     def set_on_track_end(self, cb):
         self._on_track_end = cb
 
-    def play(self, item):
-        self.stop()
-        if isinstance(item, Track):
-            # Download before playing
-            fp, err = self.client.download(item)
-            if err:
-                print(f"❌ {err}")
+    def play(self, track: Track):
+        with self._lock:
+            if self._player.is_playing():
+                self.stop()
+            if not track.filepath or not os.path.exists(track.filepath):
+                print(f"! Cannot play: file missing at {track.filepath}")
                 return
-            file = fp
-        else:
-            file = item
+            abs_path = os.path.abspath(track.filepath)
 
-        abs_path = os.path.abspath(file)
-        media = vlc.Media(f"file:///{abs_path}")
-        self._player.set_media(media)
-        self._player.play()
-        self._playing = abs_path
-        print(f"▶ Now playing: {self._playing}")
+            # Create media and keep reference
+            media = self._instance.media_new_path(abs_path)
+            self._media = media
+            self._player.set_media(media)
+
+            self._current = track
+            result = self._player.play()
+            print(f"▶ Now playing: {track} (VLC result {result})")
+
+            # import time
+            # time.sleep(0.2)
+            # state = self._player.get_state()
+            # print(f"🎵 VLC state after play: {state}")
 
     def pause(self):
         with self._lock:
@@ -419,6 +423,7 @@ class MusicController:
                         continue
                     tr.filepath = fp
                     print(f"▶ Playing: {tr}")
+                    print(tr.filepath)
                     self.player.play(tr)
 
                 else:
